@@ -1,0 +1,3 @@
+- insert:
+    - id: notifications
+      name: dsh-notifications
