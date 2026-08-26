@@ -4,6 +4,11 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) plug
 
 ![The Sound notifications card inside Settings → Plugins](./assets/screenshot.png)
 
+
+https://github.com/user-attachments/assets/88cdc545-c5dd-48cc-8921-312dd86bec79
+
+
+
 ## Features
 
 - Six notification events, each with its own on/off toggle and sound picker
