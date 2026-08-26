@@ -2,6 +2,8 @@
 
 A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) plugin that plays short sounds when the agent needs your attention or finishes work: questions, approval requests, turn completion, background jobs, subagents, and errors.
 
+![The Sound notifications card inside Settings → Plugins](./assets/screenshot.png)
+
 ## Features
 
 - Six notification events, each with its own on/off toggle and sound picker
