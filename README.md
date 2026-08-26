@@ -1,6 +1,6 @@
 # DSH Notifications
 
-A DeepSeek Harness plugin that plays short sounds when the agent needs your attention or finishes work: questions, approval requests, turn completion, background jobs, subagents, and errors.
+A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) plugin that plays short sounds when the agent needs your attention or finishes work: questions, approval requests, turn completion, background jobs, subagents, and errors.
 
 ## Features
 
@@ -72,3 +72,7 @@ pnpm typecheck
 ```
 
 The package has two halves: the Host half (`src/index.ts`) registers the `dsh-notifications` settings namespace, and the browser half (`src/client/`) renders the configuration card and runs the continuous session observation loop. The client bundle is emitted in DSH's lazy-CJS module format (see `tsdown.config.ts`).
+
+## License
+
+[MIT](./LICENSE)
