@@ -1,7 +1,6 @@
 /**
  * Web Audio engine for the 20 notification sounds.
- * Canonical spec: mockup/index.html (approved by Alon) — note() and PLAYERS
- * are copied verbatim from it, only typed.
+ * note() and the PLAYERS table below are the canonical sound definitions.
  */
 import type { SoundId } from '../sound-ids'
 
@@ -25,7 +24,7 @@ let audioCtx: AudioContext | null = null
 let masterGain: GainNode | null = null
 let currentVolume = 80
 
-/** Perceptual-ish volume curve, copied from the approved mockup. */
+/** Perceptual-ish volume curve. */
 function volumeToGain(v: number): number {
   return Math.pow(v / 100, 1.5) * 0.9
 }

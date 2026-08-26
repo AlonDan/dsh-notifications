@@ -1,9 +1,8 @@
 /**
- * The notifications card inside Settings -> Plugins -> Plugin configuration
- * (BUILD-DOCUMENT.md 4.7, revised placement). Same visual language as the
- * built-in plugin cards: a header naming the plugin that discloses its
- * controls in place. Every change writes straight through `scope.set`
- * (auto-save), so the card carries no save/discard footer.
+ * The notifications card inside Settings -> Plugins -> Plugin configuration.
+ * Same visual language as the built-in plugin cards: a header naming the
+ * plugin that discloses its controls in place. Every change writes straight
+ * through `scope.set` (auto-save), so the card carries no save/discard footer.
  */
 import { useState } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -27,7 +26,7 @@ function soundLabel(id: SoundId): string {
   return id.split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
 }
 
-/** The row's speaker icon (same geometry as the mockup). */
+/** The row's speaker icon. */
 function SpeakerIcon() {
   return (
     <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -46,7 +45,7 @@ function ChevronIcon(props: { open: boolean }) {
   )
 }
 
-/** The pill switch (mockup geometry, DSH tokens). */
+/** The pill switch (styled with DSH design tokens). */
 function Switch(props: { checked: boolean, label: string, onChange: (checked: boolean) => void }) {
   return (
     <label className="dsh-notif-switch" title={props.label}>

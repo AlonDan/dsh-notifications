@@ -1,5 +1,5 @@
 /**
- * Notifications card dictionaries (en + zh), per BUILD-DOCUMENT.md 4.7.
+ * Notifications card dictionaries (en + zh).
  * The English dictionary defines the key set; both must stay in balance
  * (the locale registry enforces it at registration).
  */
