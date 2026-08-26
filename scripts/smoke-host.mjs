@@ -18,11 +18,11 @@ function check(name, cond, detail) {
 // --- Schema: defaults (schemastery schemas are callable validators) -------------
 const resolved = Config({})
 const EXPECTED_DEFAULTS = {
-  master: true, volume: 80,
+  master: true, volume: 100,
   questionOn: true, questionSound: 'chime',
   approvalOn: true, approvalSound: 'pulse',
-  taskOn: true, taskSound: 'double-pop',
-  jobOn: true, jobSound: 'bubble-pop',
+  taskOn: true, taskSound: 'complete',
+  jobOn: true, jobSound: 'sparkle',
   subagentOn: false, subagentSound: 'soft-ping',
   errorOn: true, errorSound: 'alert',
 }

@@ -16,15 +16,15 @@ export type { NotificationSettings }
 
 export const Config: z<NotificationSettings> = z.object({
   master: z.boolean().default(true),
-  volume: z.number().step(1).min(0).max(100).default(80),
+  volume: z.number().step(1).min(0).max(100).default(100),
   questionOn: z.boolean().default(true),
   questionSound: z.union(SOUND_IDS).default('chime'),
   approvalOn: z.boolean().default(true),
   approvalSound: z.union(SOUND_IDS).default('pulse'),
   taskOn: z.boolean().default(true),
-  taskSound: z.union(SOUND_IDS).default('double-pop'),
+  taskSound: z.union(SOUND_IDS).default('complete'),
   jobOn: z.boolean().default(true),
-  jobSound: z.union(SOUND_IDS).default('bubble-pop'),
+  jobSound: z.union(SOUND_IDS).default('sparkle'),
   subagentOn: z.boolean().default(false),
   subagentSound: z.union(SOUND_IDS).default('soft-ping'),
   errorOn: z.boolean().default(true),

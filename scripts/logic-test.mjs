@@ -64,11 +64,11 @@ console.log = (...a) => {
 
 // --- Fake ctx ---------------------------------------------------------------
 const DEFAULTS = {
-  master: true, volume: 80,
+  master: true, volume: 100,
   questionOn: true, questionSound: 'chime',
   approvalOn: true, approvalSound: 'pulse',
-  taskOn: true, taskSound: 'double-pop',
-  jobOn: true, jobSound: 'bubble-pop',
+  taskOn: true, taskSound: 'complete',
+  jobOn: true, jobSound: 'sparkle',
   subagentOn: false, subagentSound: 'soft-ping',
   errorOn: true, errorSound: 'alert',
 }
@@ -187,13 +187,13 @@ setList({ ...base, byId: { s1: { running: false, pendingInteraction: 'approval' 
 check('S4 approval edge', edges.at(-1) === 'approval', edges.join(','))
 expectFreqs('S4 pulse notes', n, [660, 660])
 
-// S5-S6: normal turn -> task (double-pop).
+// S5-S6: normal turn -> task (complete).
 n = REC.oscStarts.length
 setList({ ...base, byId: { s1: { running: true, pendingInteraction: undefined } } })
 check('S5 turn start: no edge', edges.length === 3, edges.join(','))
 setList({ ...base, byId: { s1: { running: false, pendingInteraction: undefined } } })
 check('S6 task edge', edges.at(-1) === 'task', edges.join(','))
-expectFreqs('S6 double-pop notes', n, [420, 1600, 420, 1600])
+expectFreqs('S6 complete notes', n, [523.25, 659.25, 784])
 
 // S7-S8: failing turn -> error (alert, square waves).
 n = REC.oscStarts.length
@@ -209,7 +209,7 @@ n = REC.oscStarts.length
 setList({ ...base, byId: { s1: { running: true, pendingInteraction: undefined } } })
 setList({ ...base, byId: { s1: { running: false, pendingInteraction: undefined } } })
 check('S9 stale error: task edge (not error)', edges.at(-1) === 'task', edges.join(','))
-expectFreqs('S9 double-pop notes', n, [420, 1600, 420, 1600])
+expectFreqs('S9 complete notes', n, [523.25, 659.25, 784])
 
 // S10: a genuinely new error still fires.
 n = REC.oscStarts.length
@@ -219,13 +219,13 @@ setList({ ...base, byId: { s1: { running: false, pendingInteraction: undefined }
 check('S10 new error edge', edges.at(-1) === 'error', edges.join(','))
 expectFreqs('S10 alert notes', n, [880, 659.25])
 
-// S11-S12: background job completes -> bubble-pop.
+// S11-S12: background job completes -> sparkle.
 n = REC.oscStarts.length
 setList({ ...base, jobsBySession: { s1: [{ id: 'j1', status: 'running' }] } })
 check('S11 job prime: no edge', edges.length === 7, edges.join(','))
 setList({ ...base, jobsBySession: { s1: [{ id: 'j1', status: 'completed' }] } })
 check('S12 job edge', edges.at(-1) === 'job', edges.join(','))
-expectFreqs('S12 bubble-pop notes', n, [420, 1600])
+expectFreqs('S12 sparkle notes', n, [1568, 2093, 2637])
 
 // S13: failing job -> error.
 n = REC.oscStarts.length
@@ -259,11 +259,11 @@ check('S17 question edge still logged', edges.at(-1) === 'question', edges.join(
 check('S17 master off: no notes', REC.oscStarts.length === n)
 scope.set('master', true)
 
-// S18: volume change + test button -> double-pop at the new master gain.
+// S18: volume change + test button -> complete at the new master gain.
 n = REC.oscStarts.length
 scope.set('volume', 50)
 face.controller.playTest('task')
-expectFreqs('S18 playTest task notes', n, [420, 1600, 420, 1600])
+expectFreqs('S18 playTest task notes', n, [523.25, 659.25, 784])
 check('S18 master gain follows volume 50', REC.masterGain !== null && close(REC.masterGain.value, Math.pow(0.5, 1.5) * 0.9), `got ${REC.masterGain?.value}`)
 
 // --- Summary -------------------------------------------------------------------

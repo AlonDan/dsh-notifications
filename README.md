@@ -21,8 +21,8 @@ Settings → Plugins → **Plugin configuration** → "Sound notifications" card
 |---|---|---|---|
 | Question asked | The agent asks a question that blocks the session (including plan review) | chime | yes |
 | Approval requested | A tool call is waiting for your approval | pulse | yes |
-| Task complete | The current turn finished successfully | double-pop | yes |
-| Background job finished | A background job completed or was stopped | bubble-pop | yes |
+| Task complete | The current turn finished successfully | complete | yes |
+| Background job finished | A background job completed or was stopped | sparkle | yes |
 | Subagent finished | A subagent of the current session stopped running | soft-ping | no |
 | Error or failure | The turn ended with an error, or a job failed | alert | yes |
 
