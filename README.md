@@ -33,19 +33,17 @@ Settings → Plugins → **Plugin configuration** → "Sound notifications" card
 
 ## Installation
 
+The package ships prebuilt; no build step is needed to install it.
+
 ```bash
-# From a local package folder:
-dsh plugin --profile <name> add ./dsh-notifications
+# From a packed tarball (recommended for end users):
+dsh plugin --profile web add ./dsh-notifications-0.0.1.tgz
 
-# Once published to npm:
-dsh plugin add dsh-notifications
-
-# Or from a packed tarball:
-pnpm pack                 # produces dsh-notifications-0.0.1.tgz
-dsh plugin add ./dsh-notifications-0.0.1.tgz
+# From a checkout of this repository (run inside the dsh-notifications folder):
+dsh plugin --profile web add .
 ```
 
-After adding or removing a plugin, restart the DSH web server so the new plugin set takes effect.
+Replace `web` with your profile name if you use a different one. After adding or removing a plugin, restart DSH so the new plugin set takes effect.
 
 ## Updating
 
