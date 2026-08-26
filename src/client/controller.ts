@@ -6,7 +6,7 @@
  * keeps working while the settings tab is closed.
  */
 import type {
-  ConversationSnapshot, ISessions, JobView, SettingsScope, SessionListState,
+  ConversationSnapshot, ISessions, JobView, SessionId, SessionListState, SettingsScope,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { NotificationSettings } from '../settings-types'
 import { playSound, setVolume } from './audio'
@@ -42,8 +42,8 @@ export class NotificationsController {
   private prevRunning = new Map<string, boolean>()
   /** Last seen job status per current-session id, then job id. */
   private prevJobs = new Map<string, Map<string, string>>()
-  /** TurnErrorNode seqs already accounted for, per session id (reset each turn start). */
-  private errorSeqs = new Map<string, Set<number>>()
+  /** Highest turn-error seq accounted for, per session id. Monotonic across turns; primed at first observation so stale durable errors never replay as fresh. */
+  private errorSeqMax = new Map<string, number>()
   /** The list.current this controller is tracking; a change drops stale edges. */
   private trackedCurrent: string | undefined
   /** Last applied volume (avoids redundant gain writes). */
@@ -65,7 +65,7 @@ export class NotificationsController {
       this.prevPending.clear()
       this.prevRunning.clear()
       this.prevJobs.clear()
-      this.errorSeqs.clear()
+      this.errorSeqMax.clear()
       this.trackedCurrent = current
     }
 
@@ -77,6 +77,7 @@ export class NotificationsController {
       if (!this.prevPending.has(current)) {
         // First observation of this session: prime without playing (no history replay).
         this.prevPending.set(current, now)
+        this.primeErrorWatermark(current)
       } else {
         const before = this.prevPending.get(current)
         if (before !== now) {
@@ -86,14 +87,13 @@ export class NotificationsController {
         }
       }
 
-      // 2. running edge: false->true starts a turn (fresh error window),
-      //    true->false ends it: error when a new TurnErrorNode landed, else task-complete.
+      // 2. running edge: true->false ends a turn: error when a TurnErrorNode with a
+      //    seq beyond the watermark landed since last accounting, else task-complete.
       const isRunning = summary.running
       const wasRunning = this.prevRunning.get(current) ?? false
-      if (!wasRunning && isRunning) this.errorSeqs.delete(current)
       if (wasRunning && !isRunning) {
         const conv = this.sessions.binding(current)?.session.getSnapshot()
-        this.play(this.hasNewTurnError(current, conv) ? 'error' : 'task')
+        this.play(this.hasFreshTurnError(current, conv) ? 'error' : 'task')
       }
       this.prevRunning.set(current, isRunning)
 
@@ -142,18 +142,28 @@ export class NotificationsController {
     this.prevJobs.set(current, now)
   }
 
-  /** True when a TurnErrorNode landed in the conversation since this session's turn started. */
-  private hasNewTurnError(sessionId: string, conv: ConversationSnapshot | undefined): boolean {
-    const seen = this.errorSeqs.get(sessionId) ?? new Set<number>()
+  /** Absorb pre-existing turn-error history so stale durable errors never replay as fresh. */
+  private primeErrorWatermark(sessionId: SessionId): void {
+    const conv = this.sessions.binding(sessionId)?.session.getSnapshot()
+    let max = -1
+    for (const node of conv?.nodes ?? []) {
+      if (node.kind === 'turn-error' && node.seq > max) max = node.seq
+    }
+    this.errorSeqMax.set(sessionId, max)
+  }
+
+  /** True when a turn-error node with a seq beyond the watermark landed; advances the watermark. */
+  private hasFreshTurnError(sessionId: SessionId, conv: ConversationSnapshot | undefined): boolean {
+    let max = this.errorSeqMax.get(sessionId) ?? -1
     let fresh = false
     for (const node of conv?.nodes ?? []) {
       if (node.kind !== 'turn-error') continue
-      if (!seen.has(node.seq)) {
-        seen.add(node.seq)
+      if (node.seq > max) {
+        max = node.seq
         fresh = true
       }
     }
-    this.errorSeqs.set(sessionId, seen)
+    this.errorSeqMax.set(sessionId, max)
     return fresh
   }
 }
