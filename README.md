@@ -2,7 +2,7 @@
 
 A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) plugin that plays short sounds when the agent needs your attention or finishes work: questions, approval requests, turn completion, background jobs, subagents, and errors.
 
-![The Sound notifications card inside Settings → Plugins](./assets/screenshot.png)
+![The Sound notifications card](./assets/screenshot.png)
 
 ## Features
 
@@ -15,7 +15,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) plug
 
 ## Where it lives
 
-Settings → Plugins → **Plugin configuration** → "Sound notifications" card.
+Plugins page in the main frame: open **Plugins**, click the **sound-notifications** row, and the configuration card appears on the page (always expanded).
 
 ## Events and defaults
 
@@ -31,7 +31,7 @@ Settings → Plugins → **Plugin configuration** → "Sound notifications" card
 ## Requirements
 
 - DeepSeek Harness with the web client (a profile that includes the Plugins settings area)
-- Tested against the DSH 0.1.1-rc.2 wave
+- Tested against DSH 1.0.0 (0.1.6-alpha.2)
 
 ## Installation
 
@@ -39,9 +39,9 @@ The package ships prebuilt; no build step is needed to install it.
 
 ```bash
 # From a packed tarball (recommended for end users):
-dsh plugin --profile web add ./dsh-notifications-0.0.1.tgz
+dsh plugin --profile web add ./dsh-sound-notifications-0.0.3.tgz
 
-# From a checkout of this repository (run inside the dsh-notifications folder):
+# From a checkout of this repository (run inside the repository folder):
 dsh plugin --profile web add .
 ```
 
@@ -50,13 +50,13 @@ Replace `web` with your profile name if you use a different one. After adding or
 ## Updating
 
 ```bash
-dsh plugin --profile <name> update dsh-notifications
+dsh plugin --profile <name> update dsh-sound-notifications
 ```
 
 ## Removal
 
 ```bash
-dsh plugin --profile <name> remove dsh-notifications
+dsh plugin --profile <name> remove dsh-sound-notifications
 ```
 
 ## Notes and limitations (v1)
