@@ -2,53 +2,30 @@
  * Notifications card stylesheet, scoped under the `dsh-notif-` prefix so no
  * selector collides with app chrome. Only real DSH design tokens are
  * referenced (the app theme defines them on :root as --dsw-alias-*); nothing
- * here redefines a token. The fold mirrors the built-in plugin cards' look
- * (border, radius, hover, open state, chevron rotation). Injected once as a
- * tagged <style> tag by the client entry (same behavior as the shared
- * preset's global-CSS loader).
+ * here redefines a token. The card mirrors the built-in plugin cards' look
+ * (border, radius, hover) and keeps its controls always visible. Injected
+ * once as a tagged <style> tag by the client entry (same behavior as the
+ * shared preset's global-CSS loader).
  */
 export const NOTIFICATIONS_CSS = `
-/* Fold card chrome (mirrors the built-in plugin cards). */
+/* Card chrome (mirrors the built-in plugin cards). */
 .dsh-notif-card {
   list-style: none;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 1px solid var(--dsw-alias-label-dimmed);
   border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-3);
-  transition: border-color 0.16s, background 0.16s;
-}
-.dsh-notif-card:hover { border-color: var(--dsw-alias-label-dimmed); }
-.dsh-notif-card.open {
   background: var(--dsw-alias-bg-layer-2);
-  border-color: var(--dsw-alias-label-dimmed);
 }
 
 .dsh-notif-card-header {
-  width: 100%;
-  appearance: none;
-  border: 0;
-  background: none;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 12px;
   padding: 14px 16px;
-  border-radius: 12px;
-}
-.dsh-notif-card-header:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
-  outline-offset: -2px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* Name over description: the description is what tells two plugins apart. */
-.dsh-notif-head-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .dsh-notif-name { font-size: 15px; font-weight: 600; line-height: 1.4; color: var(--dsw-alias-label-primary); }
 .dsh-notif-description { font-size: 13px; line-height: 1.5; color: var(--dsw-alias-label-tertiary); }
-
-.dsh-notif-chevron { flex: none; color: var(--dsw-alias-label-tertiary); transition: transform 0.16s; }
-.dsh-notif-chevron.open { transform: rotate(180deg); }
 
 .dsh-notif-card-body { border-top: 1px solid var(--dsw-alias-border-l2); margin: 0 16px; padding-bottom: 8px; }
 

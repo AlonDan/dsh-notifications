@@ -1,13 +1,16 @@
 /**
  * Event detection for notification sounds.
- * Watches SessionListState edges (status changes, never statuses) plus the
- * current session's ConversationSnapshot for turn errors, and plays the
- * matching sound per the live settings scope. Runs at plugin level, so it
- * keeps working while the settings tab is closed.
+ * Watches the Session list edges (running bits, job statuses, subagent rows)
+ * plus the Session UI status source (pending questions/approvals) and the
+ * last agent error per session, and plays the matching sound per the live
+ * settings scope. Only sessions shown in the main view fire sounds, matched
+ * to the old current-session behavior. Runs at plugin level, so it keeps
+ * working while the settings UI is closed.
  */
-import type {
-  ConversationSnapshot, ISessions, JobView, SessionId, SessionListState, SettingsScope,
-} from '@deepseek-ai/dsh-client-runtime/client'
+import type { ISessions, SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { NotificationSettings } from '../settings-types'
 import { playSound, setVolume } from './audio'
 
@@ -35,79 +38,114 @@ const SOUND_KEY: Record<NotificationEvent, SoundKey> = {
   error: 'errorSound',
 }
 
+/** The Session UI status source face (UiSession.sessionStatus). */
+type StatusSource = {
+  getSnapshot(): SessionStatusSnapshot
+  subscribe(listener: () => void): () => void
+}
+
 export class NotificationsController {
-  /** Last seen pendingInteraction per session id (edge detection). */
-  private prevPending = new Map<string, string | undefined>()
-  /** Last seen running bit per session id (current + its subagents). */
-  private prevRunning = new Map<string, boolean>()
-  /** Last seen job status per current-session id, then job id. */
-  private prevJobs = new Map<string, Map<string, string>>()
-  /** Highest turn-error seq accounted for, per session id. Monotonic across turns; primed at first observation so stale durable errors never replay as fresh. */
-  private errorSeqMax = new Map<string, number>()
-  /** The list.current this controller is tracking; a change drops stale edges. */
-  private trackedCurrent: string | undefined
+  /** Last seen pending-interaction key per session id (edge detection). */
+  private prevPending = new Map<SessionId, string | undefined>()
+  /** Last seen running bit per session id (main sessions + their subagents). */
+  private prevRunning = new Map<SessionId, boolean>()
+  /** Last seen job status per main session id, then job id. */
+  private prevJobs = new Map<SessionId, Map<string, string>>()
+  /** Last seen turn-error message per session id (edge detection). */
+  private prevError = new Map<SessionId, string | null>()
+  /** Sessions currently shown in the main view; only they fire sounds. */
+  private readonly main = new Set<SessionId>()
+  /** Live retainInfo watches, one per known session id. */
+  private readonly retainWatch = new Map<SessionId, () => void>()
+  /** Latest list snapshot, used when a session enters the main view. */
+  private lastList: SessionListState | undefined
   /** Last applied volume (avoids redundant gain writes). */
   private appliedVolume = Number.NaN
 
   constructor(
     private readonly scope: SettingsScope<NotificationSettings>,
     private readonly sessions: ISessions,
+    private readonly status: StatusSource,
   ) {}
 
-  /** Feed one SessionListState snapshot; plays a sound for every edge it contains. */
-  observe(list: SessionListState): void {
-    const current = list.current
-    if (!current) return
-
-    // A different session is now current: drop stale edges so we never replay
-    // transitions that happened while another session was in view.
-    if (this.trackedCurrent !== current) {
+  /**
+   * Attach to the session sources; plays an edge sound only for sessions the
+   * main view shows.
+   * @returns the disposer that drops every watch.
+   */
+  start(): () => void {
+    const onList = () => this.observeList(this.sessions.list.getSnapshot())
+    const onStatus = () => this.observeStatus(this.status.getSnapshot())
+    const offList = this.sessions.list.subscribe(onList)
+    const offStatus = this.status.subscribe(onStatus)
+    onList() // prime: adopt every live value without playing.
+    onStatus()
+    return () => {
+      offList()
+      offStatus()
+      for (const off of this.retainWatch.values()) off()
+      this.retainWatch.clear()
+      this.main.clear()
       this.prevPending.clear()
       this.prevRunning.clear()
       this.prevJobs.clear()
-      this.errorSeqMax.clear()
-      this.trackedCurrent = current
+      this.prevError.clear()
+      this.lastList = undefined
     }
+  }
 
-    // 1-3 run on the current session's summary.
-    const summary = list.byId[current]
-    if (summary) {
-      // 1. pendingInteraction edge: question / plan-review -> question, approval -> approval.
-      const now = summary.pendingInteraction
-      if (!this.prevPending.has(current)) {
-        // First observation of this session: prime without playing (no history replay).
-        this.prevPending.set(current, now)
-        this.primeErrorWatermark(current)
-      } else {
-        const before = this.prevPending.get(current)
-        if (before !== now) {
-          this.prevPending.set(current, now)
-          if (now === 'question' || now === 'plan-review') this.play('question')
-          else if (now === 'approval') this.play('approval')
-        }
+  /** Feed one list snapshot; plays the job, subagent, and turn-end edges it contains. */
+  private observeList(list: SessionListState): void {
+    this.lastList = list
+    this.syncRetainWatches(list)
+    const byId = list.byId
+    for (const id of Object.keys(byId) as SessionId[]) {
+      if (!this.main.has(id)) continue
+      const summary = byId[id]
+      if (!summary) continue
+      if (!this.prevRunning.has(id)) this.prime(id)
+      // 1. running edge: true->false ends a turn: error when a fresh agent error
+      //    is visible, else task-complete.
+      const wasRunning = this.prevRunning.get(id) ?? false
+      const conv = this.sessions.binding(id)?.session.getSnapshot()
+      const error = conv?.lastAgentError ?? null
+      if (wasRunning && !summary.running) {
+        this.play(error !== this.prevError.get(id) ? 'error' : 'task')
       }
+      this.prevRunning.set(id, summary.running)
+      this.prevError.set(id, error)
 
-      // 2. running edge: true->false ends a turn: error when a TurnErrorNode with a
-      //    seq beyond the watermark landed since last accounting, else task-complete.
-      const isRunning = summary.running
-      const wasRunning = this.prevRunning.get(current) ?? false
-      if (wasRunning && !isRunning) {
-        const conv = this.sessions.binding(current)?.session.getSnapshot()
-        this.play(this.hasFreshTurnError(current, conv) ? 'error' : 'task')
-      }
-      this.prevRunning.set(current, isRunning)
-
-      // 3. job status transitions visible to the current session.
-      this.observeJobs(current, list.jobsBySession[current] ?? [])
+      // 2. job status transitions visible to this session.
+      this.observeJobs(id, list.jobsBySession[id] ?? [])
     }
-
-    // 4. running edges of subagents owned by the current session.
-    for (const [id, s] of Object.entries(list.byId)) {
-      if (id === current || s.origin !== 'subagent' || s.parentId !== current) continue
+    // 3. running edges of subagents owned by a main session.
+    for (const [id, s] of Object.entries(byId) as [SessionId, SessionSummary][]) {
+      if (s.origin !== 'subagent') continue
+      const parent = s.parentId
+      if (parent === undefined || !this.main.has(parent)) continue
       const was = this.prevRunning.get(id) ?? false
-      const is = s.running
-      if (was && !is) this.play('subagent')
-      this.prevRunning.set(id, is)
+      if (was && !s.running) this.play('subagent')
+      this.prevRunning.set(id, s.running)
+    }
+  }
+
+  /** Feed one status snapshot; plays the question/approval edges it contains. */
+  private observeStatus(snapshot: SessionStatusSnapshot): void {
+    for (const id of [...this.main]) {
+      const st = snapshot.get(id)
+      const now = st?.pendingInteraction?.key
+      if (!this.prevPending.has(id)) {
+        // First observation of this session: prime without playing.
+        this.prevPending.set(id, now)
+        continue
+      }
+      const before = this.prevPending.get(id)
+      if (before === now) continue
+      this.prevPending.set(id, now)
+      if (now === undefined) continue
+      const kind = st?.pendingInteraction?.kind
+      if (kind === 'question' || kind === 'plan-review') this.play('question')
+      else if (kind === 'approval') this.play('approval')
     }
   }
 
@@ -125,9 +163,9 @@ export class NotificationsController {
     playSound(s[SOUND_KEY[event]])
   }
 
-  /** Diff the current session's job list by id and play on status transitions. */
-  private observeJobs(current: string, jobs: readonly JobView[]): void {
-    const prev = this.prevJobs.get(current) ?? new Map<string, string>()
+  /** Diff one session's job list by id and play on status transitions. */
+  private observeJobs(sessionId: SessionId, jobs: readonly { id: string; status: string }[]): void {
+    const prev = this.prevJobs.get(sessionId) ?? new Map<string, string>()
     const now = new Map<string, string>()
     for (const job of jobs) {
       now.set(job.id, job.status)
@@ -139,31 +177,61 @@ export class NotificationsController {
         this.play('error')
       }
     }
-    this.prevJobs.set(current, now)
+    this.prevJobs.set(sessionId, now)
   }
 
-  /** Absorb pre-existing turn-error history so stale durable errors never replay as fresh. */
-  private primeErrorWatermark(sessionId: SessionId): void {
-    const conv = this.sessions.binding(sessionId)?.session.getSnapshot()
-    let max = -1
-    for (const node of conv?.nodes ?? []) {
-      if (node.kind === 'turn-error' && node.seq > max) max = node.seq
-    }
-    this.errorSeqMax.set(sessionId, max)
-  }
-
-  /** True when a turn-error node with a seq beyond the watermark landed; advances the watermark. */
-  private hasFreshTurnError(sessionId: SessionId, conv: ConversationSnapshot | undefined): boolean {
-    let max = this.errorSeqMax.get(sessionId) ?? -1
-    let fresh = false
-    for (const node of conv?.nodes ?? []) {
-      if (node.kind !== 'turn-error') continue
-      if (node.seq > max) {
-        max = node.seq
-        fresh = true
+  /**
+   * Keep one retainInfo watch per live session id. The main view retains the
+   * session it shows under the `mainView` source, so its count is the
+   * current-session fact the list state no longer carries.
+   */
+  private syncRetainWatches(list: SessionListState): void {
+    const live = new Set(Object.keys(list.byId) as SessionId[])
+    for (const id of [...this.retainWatch.keys()]) {
+      if (!live.has(id)) {
+        this.retainWatch.get(id)?.()
+        this.retainWatch.delete(id)
+        this.leaveMain(id)
       }
     }
-    this.errorSeqMax.set(sessionId, max)
-    return fresh
+    for (const id of live) this.watchMain(id)
+  }
+
+  private watchMain(id: SessionId): void {
+    if (this.retainWatch.has(id)) return
+    const source = this.sessions.retainInfo(id)
+    const update = () => {
+      const inMain = (source.getSnapshot().retainedBy.mainView ?? 0) > 0
+      if (inMain) this.enterMain(id)
+      else this.leaveMain(id)
+    }
+    update()
+    this.retainWatch.set(id, source.subscribe(update))
+  }
+
+  /** Adopt every live value for a newly shown session so history never replays. */
+  private prime(id: SessionId): void {
+    const list = this.lastList
+    const summary = list?.byId[id]
+    this.prevRunning.set(id, summary?.running ?? false)
+    this.prevError.set(id, this.sessions.binding(id)?.session.getSnapshot()?.lastAgentError ?? null)
+    this.prevJobs.set(id, new Map((list?.jobsBySession[id] ?? []).map((job): [string, string] => [job.id, job.status])))
+    const st = this.status.getSnapshot().get(id)
+    this.prevPending.set(id, st?.pendingInteraction?.key)
+  }
+
+  private enterMain(id: SessionId): void {
+    if (this.main.has(id)) return
+    this.main.add(id)
+    this.prime(id)
+  }
+
+  /** Drop stale edges when a session leaves the main view. */
+  private leaveMain(id: SessionId): void {
+    if (!this.main.delete(id)) return
+    this.prevPending.delete(id)
+    this.prevRunning.delete(id)
+    this.prevJobs.delete(id)
+    this.prevError.delete(id)
   }
 }

@@ -1,10 +1,10 @@
 /**
- * The notifications card inside Settings -> Plugins -> Plugin configuration.
- * Same visual language as the built-in plugin cards: a header naming the
- * plugin that discloses its controls in place. Every change writes straight
+ * The notifications card on the bundle's configuration page of the sidebar
+ * Plugins page. Same visual language as the built-in plugin cards: a header
+ * naming the plugin over its controls, which stay visible (the page shows one
+ * card, so there is nothing to fold away). Every change writes straight
  * through `scope.set` (auto-save), so the card carries no save/discard footer.
  */
-import { useState } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { NotificationSettings } from '../settings-types'
 import { SOUND_IDS, type SoundId } from '../sound-ids'
@@ -13,7 +13,7 @@ import { NOTIFICATION_EVENTS, type NotificationEventId, type NotificationsTabFac
 
 /** Props the renderer binds for the notifications card. */
 export type NotificationsCardProps =
-  PropsRuntime<'settings.plugin.item'>
+  PropsRuntime<'plugins.bundle.config'>
   & PropsLocale<'dsh.notifications'>
   & InjectFace<NotificationsTabFace>
 
@@ -36,15 +36,6 @@ function SpeakerIcon() {
   )
 }
 
-/** The fold's chevron (rotates when the card is open). */
-function ChevronIcon(props: { open: boolean }) {
-  return (
-    <svg className={props.open ? 'dsh-notif-chevron open' : 'dsh-notif-chevron'} viewBox="0 0 14 14" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m3.5 5.25 3.5 3.5 3.5-3.5" />
-    </svg>
-  )
-}
-
 /** The pill switch (styled with DSH design tokens). */
 function Switch(props: { checked: boolean, label: string, onChange: (checked: boolean) => void }) {
   return (
@@ -58,34 +49,24 @@ function Switch(props: { checked: boolean, label: string, onChange: (checked: bo
 /**
  * Render the notifications card.
  * @param props - locale copy, runtime share, and the injected controller + scope hook.
- * @returns the fold, or nothing until the first accepted settings section.
+ * @returns the card, or nothing until the first accepted settings section.
  */
 export function NotificationsCard(props: NotificationsCardProps) {
-  const [open, setOpen] = useState(false)
-  const { t, controller } = props
+  const { t, controller, view } = props
   const snapshot = props.useNotifications(snap => snap)
-  if (snapshot.status !== 'ready' || snapshot.value === undefined) return null
+  // The bundle's page asks the 'page' view only; guard the render anyway.
+  if (view !== 'page' || snapshot.status !== 'ready' || snapshot.value === undefined) return null
   const value: NotificationSettings = snapshot.value
   const title = t('title')
 
   return (
-    <li className={open ? 'dsh-notif-card open' : 'dsh-notif-card'}>
-      <button
-        type="button"
-        className="dsh-notif-card-header"
-        aria-expanded={open}
-        aria-label={`${t(open ? 'collapse' : 'expand')}: ${title}`}
-        onClick={() => { setOpen(!open) }}
-      >
-        <span className="dsh-notif-head-text">
-          <span className="dsh-notif-name">{title}</span>
-          <span className="dsh-notif-description">{t('description')}</span>
-        </span>
-        <ChevronIcon open={open} />
-      </button>
+    <div className="dsh-notif-card">
+      <div className="dsh-notif-card-header">
+        <span className="dsh-notif-name">{title}</span>
+        <span className="dsh-notif-description">{t('description')}</span>
+      </div>
 
-      {open ? (
-        <div className="dsh-notif-card-body">
+      <div className="dsh-notif-card-body">
           <div className="dsh-notif-field">
             <Switch checked={value.master} label={t('master')} onChange={checked => controller.setMaster(checked)} />
             <span className="dsh-notif-field-label">{t('master')}</span>
@@ -144,7 +125,6 @@ export function NotificationsCard(props: NotificationsCardProps) {
             <span className="dsh-notif-version">DSH Notifications v{PLUGIN_VERSION}</span>
           </div>
         </div>
-      ) : null}
-    </li>
+    </div>
   )
 }

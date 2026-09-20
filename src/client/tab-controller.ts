@@ -3,7 +3,7 @@
  * snapshot (through the injected hook) and routes every user choice through
  * this controller, which performs `scope.set` (auto-save) and test playback.
  */
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { NotificationSettings } from '../settings-types'
 import type { SoundId } from '../sound-ids'
 import { playSound, setVolume } from './audio'

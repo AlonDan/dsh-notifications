@@ -21,8 +21,6 @@ const EN = {
   'subagent.desc': 'A subagent of the current session stopped running.',
   'error.name': 'Error or failure',
   'error.desc': 'The turn ended with an error, or a job failed.',
-  expand: 'Expand',
-  collapse: 'Collapse',
 } as const
 
 /** The tab's locale key set (the English dictionary is canonical). */
@@ -53,8 +51,6 @@ export const ZH: Record<NotificationsLocaleKey, string> = {
   'subagent.desc': '当前会话的子代理停止运行。',
   'error.name': '错误或失败',
   'error.desc': '轮次以错误结束，或作业失败。',
-  expand: '展开',
-  collapse: '收起',
 }
 
 /** English dictionary (typed to the key set). */

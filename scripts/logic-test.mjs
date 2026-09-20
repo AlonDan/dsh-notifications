@@ -1,11 +1,12 @@
 /**
  * Headless logic test for the client bundle. Materializes the factory with a
- * fake ctx (settings scope + session list + slots + locale) and drives
- * synthetic SessionListState edges through the compiled observation loop.
- * Asserts which events reach play() (via its console marker) and which
- * oscillator notes the WebAudio fakes receive, covering all six notification
- * paths, default settings, mute gating, volume propagation, first-observation
- * priming (no phantom playback), and the stale turn-error regression.
+ * fake ctx (settings scope + session list + session UI status + slots +
+ * locale) and drives synthetic list, status, and last-agent-error edges
+ * through the compiled observation loop. Asserts which events reach play()
+ * (via its console marker) and which oscillator notes the WebAudio fakes
+ * receive, covering all six notification paths, default settings, mute
+ * gating, volume propagation, first-observation priming (no phantom
+ * playback), and the stale turn-error regression.
  * Not part of the published package.
  */
 import { createRequire } from 'node:module'
@@ -78,9 +79,12 @@ const scope = {
   set: (key, value) => { settings[key] = value; return Promise.resolve() },
 }
 
-let listState = { current: undefined, byId: {}, jobsBySession: {} }
-let convNodes = []
+let listState = { byId: {}, jobsBySession: {} }
+let statusState = new Map() // SessionId -> { running?, pendingInteraction?, completionUnread? }
+let agentError = null // per-session lastAgentError mirror (single-session test)
+const mainIds = new Set(['s1']) // the main view shows s1 for the whole run
 const listeners = new Set()
+const statusListeners = new Set()
 const effects = []
 const localeRegs = []
 let cardSpec = null
@@ -93,7 +97,17 @@ const ctx = {
       subscribe: (cb) => { listeners.add(cb); return () => { listeners.delete(cb) } },
       getSnapshot: () => listState,
     },
-    binding: () => ({ session: { getSnapshot: () => ({ nodes: convNodes }) } }),
+    binding: () => ({ session: { getSnapshot: () => ({ lastAgentError: agentError }) } }),
+    retainInfo: (id) => ({
+      getSnapshot: () => ({ referenceCount: 1, retainedBy: mainIds.has(id) ? { mainView: 1 } : {} }),
+      subscribe: () => () => {},
+    }),
+  },
+  uiSession: {
+    sessionStatus: {
+      getSnapshot: () => statusState,
+      subscribe: (cb) => { statusListeners.add(cb); return () => { statusListeners.delete(cb) } },
+    },
   },
   locale: { register: (ns, dict) => { localeRegs.push([ns, Object.keys(dict.en).sort(), Object.keys(dict.zh).sort()]) } },
   slots: {
@@ -138,8 +152,8 @@ function expectFreqs(name, from, expected) {
 }
 
 // --- Apply-level checks -------------------------------------------------------
-check('card registered into settings.plugin.item', cardSpec !== null && CardComponent !== null)
-check('card keyed by the settings namespace', cardSpec?.key === 'dsh-notifications')
+check('card registered into plugins.bundle.config', cardSpec !== null && CardComponent !== null && cardSpec?.name === 'plugins.bundle.config')
+check('card keyed by the bundle package name', cardSpec?.key === 'dsh-sound-notifications')
 check('card locale is dsh.notifications', cardSpec?.locale === 'dsh.notifications')
 const face = cardSpec?.inject()
 check('face exposes controller + scope hook', !!face && typeof face.controller.playTest === 'function' && face.hooks.notifications === scope)
@@ -148,16 +162,19 @@ check('three effects registered', effects.length === 3, effects.join(', '))
 
 // --- Drive synthetic edges ----------------------------------------------------
 const base = {
-  current: 's1',
-  byId: { s1: { running: false, pendingInteraction: undefined } },
+  byId: { s1: { running: false } },
   jobsBySession: {},
 }
 function setList(patch) {
   listState = patch
   for (const cb of listeners) cb()
 }
+function setStatus(map) {
+  statusState = map
+  for (const cb of statusListeners) cb()
+}
 
-// S0: first observation primes without playing.
+// S0: first observation primes without playing (s1 enters the main view).
 let n = REC.oscStarts.length
 setList(base)
 check('S0 prime: no edge', edges.length === 0, edges.join(','))
@@ -165,57 +182,58 @@ check('S0 prime: no notes', REC.oscStarts.length === n)
 
 // S1: question asked -> chime.
 n = REC.oscStarts.length
-setList({ ...base, byId: { s1: { running: false, pendingInteraction: 'question' } } })
+setStatus(new Map([['s1', { pendingInteraction: { key: 'q1', kind: 'question' } }]]))
 check('S1 question edge', edges.at(-1) === 'question', edges.join(','))
 expectFreqs('S1 chime notes', n, [659.25, 880])
 
 // S2: question resolved -> silence.
 n = REC.oscStarts.length
-setList(base)
+setStatus(new Map())
 check('S2 resolve: no edge', edges.length === 1, edges.join(','))
 check('S2 resolve: no notes', REC.oscStarts.length === n)
 
 // S3: plan review counts as question -> chime.
 n = REC.oscStarts.length
-setList({ ...base, byId: { s1: { running: false, pendingInteraction: 'plan-review' } } })
+setStatus(new Map([['s1', { pendingInteraction: { key: 'q2', kind: 'plan-review' } }]]))
 check('S3 plan-review edge is question', edges.at(-1) === 'question', edges.join(','))
 expectFreqs('S3 chime notes', n, [659.25, 880])
 
 // S4: approval requested -> pulse.
 n = REC.oscStarts.length
-setList({ ...base, byId: { s1: { running: false, pendingInteraction: 'approval' } } })
+setStatus(new Map([['s1', { pendingInteraction: { key: 'a1', kind: 'approval' } }]]))
 check('S4 approval edge', edges.at(-1) === 'approval', edges.join(','))
 expectFreqs('S4 pulse notes', n, [660, 660])
+setStatus(new Map())
 
 // S5-S6: normal turn -> task (complete).
 n = REC.oscStarts.length
-setList({ ...base, byId: { s1: { running: true, pendingInteraction: undefined } } })
+setList({ ...base, byId: { s1: { running: true } } })
 check('S5 turn start: no edge', edges.length === 3, edges.join(','))
-setList({ ...base, byId: { s1: { running: false, pendingInteraction: undefined } } })
+setList({ ...base, byId: { s1: { running: false } } })
 check('S6 task edge', edges.at(-1) === 'task', edges.join(','))
 expectFreqs('S6 complete notes', n, [523.25, 659.25, 784])
 
 // S7-S8: failing turn -> error (alert, square waves).
 n = REC.oscStarts.length
-setList({ ...base, byId: { s1: { running: true, pendingInteraction: undefined } } })
-convNodes = [{ kind: 'turn-error', seq: 1 }]
-setList({ ...base, byId: { s1: { running: false, pendingInteraction: undefined } } })
+setList({ ...base, byId: { s1: { running: true } } })
+agentError = 'boom'
+setList({ ...base, byId: { s1: { running: false } } })
 check('S8 error edge', edges.at(-1) === 'error', edges.join(','))
 expectFreqs('S8 alert notes', n, [880, 659.25])
 check('S8 alert uses square waves', REC.oscStarts.slice(n).every((o) => o.type === 'square'))
 
 // S9: regression - a stale turn-error must not replay on the next normal turn.
 n = REC.oscStarts.length
-setList({ ...base, byId: { s1: { running: true, pendingInteraction: undefined } } })
-setList({ ...base, byId: { s1: { running: false, pendingInteraction: undefined } } })
+setList({ ...base, byId: { s1: { running: true } } })
+setList({ ...base, byId: { s1: { running: false } } })
 check('S9 stale error: task edge (not error)', edges.at(-1) === 'task', edges.join(','))
 expectFreqs('S9 complete notes', n, [523.25, 659.25, 784])
 
 // S10: a genuinely new error still fires.
 n = REC.oscStarts.length
-setList({ ...base, byId: { s1: { running: true, pendingInteraction: undefined } } })
-convNodes = [{ kind: 'turn-error', seq: 1 }, { kind: 'turn-error', seq: 3 }]
-setList({ ...base, byId: { s1: { running: false, pendingInteraction: undefined } } })
+setList({ ...base, byId: { s1: { running: true } } })
+agentError = 'boom-2'
+setList({ ...base, byId: { s1: { running: false } } })
 check('S10 new error edge', edges.at(-1) === 'error', edges.join(','))
 expectFreqs('S10 alert notes', n, [880, 659.25])
 
@@ -254,10 +272,11 @@ expectFreqs('S16 soft-ping note', n, [880])
 n = REC.oscStarts.length
 scope.set('master', false)
 setList(base)
-setList({ ...base, byId: { s1: { running: false, pendingInteraction: 'question' } } })
+setStatus(new Map([['s1', { pendingInteraction: { key: 'q3', kind: 'question' } }]]))
 check('S17 question edge still logged', edges.at(-1) === 'question', edges.join(','))
 check('S17 master off: no notes', REC.oscStarts.length === n)
 scope.set('master', true)
+setStatus(new Map())
 
 // S18: volume change + test button -> complete at the new master gain.
 n = REC.oscStarts.length
@@ -265,6 +284,31 @@ scope.set('volume', 50)
 face.controller.playTest('task')
 expectFreqs('S18 playTest task notes', n, [523.25, 659.25, 784])
 check('S18 master gain follows volume 50', REC.masterGain !== null && close(REC.masterGain.value, Math.pow(0.5, 1.5) * 0.9), `got ${REC.masterGain?.value}`)
+
+// --- Render checks (headless React, no DOM) ------------------------------------
+// The card must render in the page view (what the Plugins page dispatches) and
+// stay invisible in any other view; the slot dispatcher hands the component
+// t/controller props plus the useNotifications selector hook.
+const React = req('react')
+const { renderToString } = req('react-dom/server')
+function cardProps(view) {
+  return {
+    view,
+    t: (key) => key,
+    controller: face.controller,
+    useNotifications: () => scope.getSnapshot(),
+  }
+}
+const html = renderToString(React.createElement(CardComponent, cardProps('page')))
+check('R1 page view renders the card header', html.includes('dsh-notif-card') && html.includes('dsh-notif-card-header') && html.includes('dsh-notif-name'), html.slice(0, 120))
+// The card keeps its controls always visible (no fold): all six rows with
+// their 20-sound selects and the master/volume fields are in the static render.
+check('R1 all six event rows render', (html.match(/class="dsh-notif-row( off)?"/g) || []).length === 6, String((html.match(/class="dsh-notif-row( off)?"/g) || []).length))
+check('R1 every row offers all 20 sounds', (html.match(/<option/g) || []).length === 120, String((html.match(/<option/g) || []).length))
+const summaryHtml = renderToString(React.createElement(CardComponent, cardProps('summary')))
+check('R2 non-page view renders nothing', summaryHtml === '', summaryHtml.slice(0, 80))
+const unavailableHtml = renderToString(React.createElement(CardComponent, { ...cardProps('page'), useNotifications: () => ({ status: 'unavailable' }) }))
+check('R3 unavailable settings render nothing', unavailableHtml === '', unavailableHtml.slice(0, 80))
 
 // --- Summary -------------------------------------------------------------------
 realLog(`checks: ${checks}, failures: ${failures}`)

@@ -7,7 +7,7 @@
  */
 import type { UserConfig } from 'tsdown'
 
-const ID = 'dsh-notifications'
+const ID = 'dsh-sound-notifications'
 
 /** Baseline module-table specifiers the web shell seeds for every client bundle. */
 const BASELINE_EXTERNALS: ReadonlySet<string> = new Set([
@@ -18,7 +18,7 @@ const BASELINE_EXTERNALS: ReadonlySet<string> = new Set([
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-ui-slots',
   '@deepseek-ai/dsh-client-ui-primitives',
-  '@deepseek-ai/dsh-client-runtime/client',
+  '@deepseek-ai/dsh-api-session-controller/client',
 ])
 
 /** Node-half externals: every production dependency stays an import. */
